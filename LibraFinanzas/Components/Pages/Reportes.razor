@@ -1,0 +1,235 @@
+@page "/reportes"
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+
+<PageTitle>Reportes — Libra</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Reportes financieros</h1>
+        <p class="page-subtitle">Analiza tus ingresos, gastos por categoría y gastos hormiga en el periodo que elijas.</p>
+    </div>
+</header>
+
+<div class="filter-bar">
+    <div class="field">
+        <label for="rep-desde">Desde</label>
+        <input id="rep-desde" type="date" @bind="fechaDesde" />
+    </div>
+
+    <div class="field">
+        <label for="rep-hasta">Hasta</label>
+        <input id="rep-hasta" type="date" @bind="fechaHasta" />
+    </div>
+
+    <div class="field">
+        <label for="rep-tipo">Tipo</label>
+        <select id="rep-tipo" @bind="tipoSeleccionado">
+            <option value="Todos">Todos</option>
+            <option value="@CatalogosFinancieros.TipoIngreso">Solo ingresos</option>
+            <option value="@CatalogosFinancieros.TipoGasto">Solo gastos</option>
+        </select>
+    </div>
+
+    <button type="button" class="btn-primary" @onclick="ConsultarAsync">Generar reporte</button>
+</div>
+
+@if (!string.IsNullOrEmpty(aviso))
+{
+    <div class="feedback-banner is-error" role="alert">
+        <span>@aviso</span>
+    </div>
+}
+
+<section class="summary-grid" aria-label="Totales del periodo">
+    <TarjetaMetrica Etiqueta="Balance del periodo"
+                    Valor="@FormatearMoneda(totalIngresos - totalGastos)"
+                    Subtitulo="@($"{resultados.Count} movimientos analizados")"
+                    ClaseVariante="is-net"
+                    ClaseSubtitulo="@(totalIngresos >= totalGastos ? "is-up" : "is-warn")"
+                    Destacada="true" />
+
+    <TarjetaMetrica Etiqueta="Ingresos del periodo"
+                    Valor="@FormatearMoneda(totalIngresos)"
+                    ClaseVariante="is-income" />
+
+    <TarjetaMetrica Etiqueta="Gastos necesarios"
+                    Valor="@FormatearMoneda(totalNecesarios)"
+                    ClaseVariante="is-needed" />
+
+    <TarjetaMetrica Etiqueta="Gastos hormiga"
+                    Valor="@FormatearMoneda(totalHormiga)"
+                    ClaseVariante="is-ant"
+                    ClaseSubtitulo="is-warn" />
+</section>
+
+<div class="body-grid">
+    <PanelContenido Titulo="Detalle de movimientos del periodo" Nota="@($"{resultados.Count} registros")">
+        @if (resultados.Count == 0)
+        {
+            <p class="empty-state">No existen movimientos en el rango de fechas seleccionado.</p>
+        }
+        else
+        {
+            <table class="ledger">
+                <thead>
+                    <tr>
+                        <th scope="col">Movimiento</th>
+                        <th scope="col">Clasificación</th>
+                        <th scope="col">Fecha</th>
+                        <th scope="col" style="text-align:right;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mov in resultados)
+                    {
+                        <tr>
+                            <td class="tx-desc">
+                                <span class="tx-title">@mov.Descripcion</span>
+                                <span class="tx-category">@mov.Tipo · @mov.Categoria</span>
+                            </td>
+                            <td>
+                                <span class="tag @ObtenerClaseEtiqueta(mov.Clasificacion)">@mov.Clasificacion</span>
+                            </td>
+                            <td class="tx-date">@mov.Fecha.ToString("dd/MM/yyyy")</td>
+                            <td class="amount @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "is-income" : "is-expense")">
+                                @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "+ " : "– ")@FormatearMoneda(mov.Monto)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </PanelContenido>
+
+    <PanelContenido Titulo="Distribución de gastos por categoría" Nota="Porcentaje sobre gastos">
+        @if (gastosPorCategoria.Count == 0)
+        {
+            <p class="empty-state">No hay gastos en este periodo para agrupar por categoría.</p>
+        }
+        else
+        {
+            <div class="category-bars">
+                @foreach (var item in gastosPorCategoria)
+                {
+                    int pct = totalGastos > 0 ? Convert.ToInt32(Math.Round((item.Total / totalGastos) * 100m)) : 0;
+
+                    <div>
+                        <div class="cat-row-head">
+                            <span class="cat-row-name">@item.Categoria (@pct%)</span>
+                            <span class="cat-row-val">@FormatearMoneda(item.Total)</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill is-navy" style="width: @(pct)%;"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </PanelContenido>
+</div>
+
+@code {
+    private class ResumenCategoria
+    {
+        public string Categoria { get; set; } = string.Empty;
+        public decimal Total { get; set; }
+    }
+
+    private DateTime fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime fechaHasta = DateTime.Today;
+    private string tipoSeleccionado = "Todos";
+    private string? aviso;
+
+    private List<Movimiento> resultados = new();
+    private List<ResumenCategoria> gastosPorCategoria = new();
+
+    private decimal totalIngresos;
+    private decimal totalGastos;
+    private decimal totalNecesarios;
+    private decimal totalHormiga;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ConsultarAsync();
+    }
+
+    private async Task ConsultarAsync()
+    {
+        aviso = null;
+        if (fechaHasta.Date < fechaDesde.Date)
+        {
+            aviso = "La fecha final no puede ser anterior a la fecha inicial.";
+            return;
+        }
+
+        resultados = await Finanzas.ObtenerMovimientosAsync(
+            idUsuario: Sesion.IdUsuarioActual,
+            tipo: tipoSeleccionado,
+            desde: fechaDesde,
+            hasta: fechaHasta);
+
+        CalcularTotales();
+    }
+
+    private void CalcularTotales()
+    {
+        totalIngresos = 0m;
+        totalGastos = 0m;
+        totalNecesarios = 0m;
+        totalHormiga = 0m;
+
+        var acumulador = new Dictionary<string, decimal>();
+
+        foreach (Movimiento m in resultados)
+        {
+            if (m.Tipo == CatalogosFinancieros.TipoIngreso)
+            {
+                totalIngresos += m.Monto;
+            }
+            else
+            {
+                totalGastos += m.Monto;
+
+                if (m.Clasificacion == CatalogosFinancieros.ClasificacionInnecesario)
+                {
+                    totalHormiga += m.Monto;
+                }
+                else
+                {
+                    totalNecesarios += m.Monto;
+                }
+
+                if (acumulador.ContainsKey(m.Categoria))
+                {
+                    acumulador[m.Categoria] += m.Monto;
+                }
+                else
+                {
+                    acumulador[m.Categoria] = m.Monto;
+                }
+            }
+        }
+
+        gastosPorCategoria = acumulador
+            .Select(par => new ResumenCategoria { Categoria = par.Key, Total = par.Value })
+            .OrderByDescending(c => c.Total)
+            .ToList();
+    }
+
+    private static string FormatearMoneda(decimal monto) =>
+        monto.ToString("$#,##0.00", CultureInfo.InvariantCulture);
+
+    private static string ObtenerClaseEtiqueta(string clasificacion)
+    {
+        switch (clasificacion)
+        {
+            case CatalogosFinancieros.ClasificacionInnecesario:
+                return "is-unnecessary";
+            case CatalogosFinancieros.ClasificacionIngreso:
+                return "is-income-tag";
+            default:
+                return "is-necessary";
+        }
+    }
+}

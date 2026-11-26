@@ -1,0 +1,135 @@
+﻿@inject SesionService Sesion
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<aside class="sidebar">
+    <div class="sidebar-top">
+        <a class="brand" href="">
+            <svg class="brand-mark" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="34" height="34" rx="8" fill="#1C7356" />
+                <path d="M9 22V13.5L17 9L25 13.5V22" stroke="#F3F4EE" stroke-width="1.7" stroke-linejoin="round" />
+                <path d="M13 22V16.5H21V22" stroke="#F3F4EE" stroke-width="1.7" stroke-linejoin="round" />
+            </svg>
+            <div>
+                <div class="brand-name">Libra</div>
+                <div class="brand-tagline">Finanzas personales</div>
+            </div>
+        </a>
+
+        <button type="button"
+                class="mobile-menu-btn"
+                aria-label="Abrir menú de navegación"
+                aria-expanded="@menuMovilAbierto"
+                @onclick="AlternarMenuMovil">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                @if (menuMovilAbierto)
+                {
+                    <path d="M6 6l12 12M18 6L6 18" />
+                }
+                else
+                {
+                    <path d="M4 7h16M4 12h16M4 17h16" />
+                }
+            </svg>
+        </button>
+    </div>
+
+    <nav class="sidebar-nav @(menuMovilAbierto ? "is-open" : "")" aria-label="Navegación principal">
+        <p class="nav-group-label">General</p>
+        <ul class="nav-list">
+            <li>
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="CerrarMenuMovil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="5" rx="1.5" /><rect x="13" y="12" width="8" height="9" rx="1.5" /><rect x="3" y="14" width="8" height="7" rx="1.5" /></svg>
+                    <span>Panel principal</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink class="nav-link" href="movimientos" @onclick="CerrarMenuMovil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17l5-5 4 4 8-9" /><path d="M15 7h5v5" /></svg>
+                    <span>Movimientos</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink class="nav-link" href="metas" @onclick="CerrarMenuMovil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5" /><path d="M12 8v4l2.8 1.6" /></svg>
+                    <span>Metas de ahorro</span>
+                </NavLink>
+            </li>
+            <li>
+                <NavLink class="nav-link" href="reportes" @onclick="CerrarMenuMovil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V9m6 10V4m6 15v-7" /></svg>
+                    <span>Reportes</span>
+                </NavLink>
+            </li>
+        </ul>
+
+        <p class="nav-group-label nav-group-spaced">Cuenta</p>
+        <ul class="nav-list">
+            <li>
+                <NavLink class="nav-link" href="ajustes" @onclick="CerrarMenuMovil">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1h.1a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" /></svg>
+                    <span>Ajustes</span>
+                </NavLink>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+        @if (Sesion.UsuarioActual is not null)
+        {
+            <a class="profile-card" href="ajustes" title="Editar perfil en Ajustes">
+                <div class="avatar" aria-hidden="true">@Sesion.UsuarioActual.ObtenerIniciales()</div>
+                <div class="profile-info">
+                    <div class="profile-name">@Sesion.UsuarioActual.Nombre</div>
+                    <div class="profile-meta">@Sesion.UsuarioActual.Correo</div>
+                    <div class="profile-meta">@Sesion.UsuarioActual.Telefono</div>
+                    <span class="status-pill @(Sesion.UsuarioActual.Activo ? "" : "is-inactive")">
+                        <span class="status-dot"></span>
+                        @(Sesion.UsuarioActual.Activo ? "Activo" : "Inactivo")
+                    </span>
+                </div>
+            </a>
+
+            <button type="button" class="btn-logout" @onclick="CerrarSesion">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                <span>Cerrar sesión</span>
+            </button>
+        }
+    </div>
+</aside>
+
+@code {
+    private bool menuMovilAbierto = false;
+
+    protected override void OnInitialized()
+    {
+        Sesion.OnCambioSesion += ActualizarMenu;
+    }
+
+    private void AlternarMenuMovil()
+    {
+        menuMovilAbierto = !menuMovilAbierto;
+    }
+
+    private void CerrarMenuMovil()
+    {
+        menuMovilAbierto = false;
+    }
+
+    private void CerrarSesion()
+    {
+        menuMovilAbierto = false;
+        Sesion.CerrarSesion();
+        Navigation.NavigateTo("/");
+    }
+
+    private void ActualizarMenu()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Sesion.OnCambioSesion -= ActualizarMenu;
+    }
+}

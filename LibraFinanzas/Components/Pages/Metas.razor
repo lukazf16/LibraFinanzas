@@ -1,0 +1,251 @@
+@page "/metas"
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+
+<PageTitle>Metas de ahorro — Libra</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Metas de ahorro</h1>
+        <p class="page-subtitle">Define objetivos financieros, realiza abonos y visualiza tu porcentaje de avance.</p>
+    </div>
+    <div class="head-actions">
+        @if (editando is null)
+        {
+            <button type="button" class="btn-primary" @onclick="NuevaMeta">Nueva meta</button>
+        }
+    </div>
+</header>
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="feedback-banner is-success" role="status">
+        <span>@mensaje</span>
+        <button type="button" class="feedback-close" @onclick="() => mensaje = null" aria-label="Cerrar aviso">✕</button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="feedback-banner is-error" role="alert">
+        <span>@error</span>
+        <button type="button" class="feedback-close" @onclick="() => error = null" aria-label="Cerrar aviso">✕</button>
+    </div>
+}
+
+@if (editando is not null)
+{
+    <PanelContenido Titulo="@(editando.IdMeta == 0 ? "Crear nueva meta de ahorro" : "Editar meta de ahorro")">
+        <EditForm Model="editando" OnValidSubmit="GuardarMeta">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-errors" />
+
+            <div class="form-grid">
+                <div class="field is-full">
+                    <label for="meta-nombre">Nombre de la meta</label>
+                    <InputText id="meta-nombre" @bind-Value="editando.Nombre" placeholder="Ej. Fondo de emergencia" />
+                    <ValidationMessage For="@(() => editando.Nombre)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="meta-objetivo">Monto objetivo</label>
+                    <div class="input-money-wrap">
+                        <span class="input-money-prefix">$</span>
+                        <InputNumber id="meta-objetivo" @bind-Value="editando.MontoObjetivo" step="0.01" />
+                    </div>
+                    <ValidationMessage For="@(() => editando.MontoObjetivo)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="meta-actual">Monto ahorrado actual</label>
+                    <div class="input-money-wrap">
+                        <span class="input-money-prefix">$</span>
+                        <InputNumber id="meta-actual" @bind-Value="editando.MontoActual" step="0.01" />
+                    </div>
+                    <ValidationMessage For="@(() => editando.MontoActual)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="meta-fecha">Fecha límite</label>
+                    <InputDate id="meta-fecha" @bind-Value="editando.FechaLimite" />
+                    <ValidationMessage For="@(() => editando.FechaLimite)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="meta-color">Color de la barra de progreso</label>
+                    <InputSelect id="meta-color" @bind-Value="editando.ColorBarra">
+                        <option value="emerald">Esmeralda (verde)</option>
+                        <option value="gold">Dorado</option>
+                        <option value="navy">Azul marino</option>
+                    </InputSelect>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" @onclick="Cancelar">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar meta</button>
+                </div>
+            </div>
+        </EditForm>
+    </PanelContenido>
+}
+else
+{
+    @if (metas.Count == 0)
+    {
+        <PanelContenido Titulo="Sin metas registradas">
+            <p class="empty-state">Aún no has creado metas de ahorro. Presiona "Nueva meta" para comenzar.</p>
+        </PanelContenido>
+    }
+    else
+    {
+        <div class="goals-grid">
+            @foreach (var meta in metas)
+            {
+                int porcentaje = meta.CalcularPorcentaje();
+                decimal faltante = meta.CalcularFaltante();
+
+                <article class="goal-card">
+                    <div class="goal-top">
+                        <span class="goal-name">@meta.Nombre</span>
+                        <span class="goal-deadline">Vence @meta.FechaLimite.ToString("MMM yyyy", culturaEs)</span>
+                    </div>
+
+                    <p class="goal-amounts">
+                        <span class="money">@meta.MontoActual.ToString("$#,##0", CultureInfo.InvariantCulture)</span>
+                        de
+                        <span class="money">@meta.MontoObjetivo.ToString("$#,##0", CultureInfo.InvariantCulture)</span>
+                    </p>
+
+                    <div class="progress-track">
+                        <div class="progress-fill @ObtenerClaseBarra(meta.ColorBarra)" style="width: @(porcentaje)%;"></div>
+                    </div>
+
+                    <div class="goal-footer">
+                        <span>@(faltante > 0 ? $"Faltan {faltante.ToString("$#,##0", CultureInfo.InvariantCulture)}" : "¡Meta lograda!")</span>
+                        <span class="goal-pct">@porcentaje%</span>
+                    </div>
+
+                    @if (metaAbonandoId == meta.IdMeta)
+                    {
+                        <div class="abono-inline">
+                            <input type="number" step="0.01" min="1" @bind="montoAbono" placeholder="Monto" />
+                            <button type="button" class="btn-emerald" @onclick="() => ConfirmarAbono(meta)">Aplicar</button>
+                            <button type="button" class="btn-ghost" @onclick="() => metaAbonandoId = 0">Cancelar</button>
+                        </div>
+                    }
+
+                    <div class="goal-actions">
+                        <button type="button" class="btn-emerald" @onclick="() => IniciarAbono(meta.IdMeta)">+ Abonar</button>
+                        <button type="button" class="btn-ghost" @onclick="() => EditarMeta(meta)">Editar</button>
+                        <button type="button" class="btn-ghost-danger" @onclick="() => EliminarMeta(meta)">Eliminar</button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+}
+
+@code {
+    private readonly CultureInfo culturaEs = new("es-MX");
+
+    private List<MetaAhorro> metas = new();
+    private MetaAhorro? editando;
+    private int metaAbonandoId;
+    private decimal montoAbono = 500m;
+    private string? mensaje;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarMetasAsync();
+    }
+
+    private async Task CargarMetasAsync()
+    {
+        metas = await Finanzas.ObtenerMetasAsync(Sesion.IdUsuarioActual);
+    }
+
+    private void NuevaMeta()
+    {
+        mensaje = null;
+        error = null;
+        editando = new MetaAhorro
+        {
+            FechaLimite = DateTime.Today.AddMonths(4),
+            ColorBarra = "emerald"
+        };
+    }
+
+    private void EditarMeta(MetaAhorro meta)
+    {
+        mensaje = null;
+        error = null;
+        editando = new MetaAhorro
+        {
+            IdMeta = meta.IdMeta,
+            IdUsuario = meta.IdUsuario,
+            Nombre = meta.Nombre,
+            MontoObjetivo = meta.MontoObjetivo,
+            MontoActual = meta.MontoActual,
+            FechaLimite = meta.FechaLimite,
+            ColorBarra = meta.ColorBarra
+        };
+    }
+
+    private void Cancelar()
+    {
+        editando = null;
+    }
+
+    private async Task GuardarMeta()
+    {
+        if (editando is null) return;
+
+        await Finanzas.GuardarMetaAsync(Sesion.IdUsuarioActual, editando);
+        mensaje = $"Meta \"{editando.Nombre}\" guardada correctamente.";
+        editando = null;
+        await CargarMetasAsync();
+    }
+
+    private void IniciarAbono(int idMeta)
+    {
+        error = null;
+        mensaje = null;
+        metaAbonandoId = idMeta;
+        montoAbono = 500m;
+    }
+
+    private async Task ConfirmarAbono(MetaAhorro meta)
+    {
+        string? resultadoError = await Finanzas.AbonarMetaAsync(Sesion.IdUsuarioActual, meta.IdMeta, montoAbono);
+        if (resultadoError != null)
+        {
+            error = resultadoError;
+            return;
+        }
+
+        mensaje = $"Se abonaron {montoAbono.ToString("$#,##0.00", CultureInfo.InvariantCulture)} a \"{meta.Nombre}\".";
+        metaAbonandoId = 0;
+        await CargarMetasAsync();
+    }
+
+    private async Task EliminarMeta(MetaAhorro meta)
+    {
+        await Finanzas.EliminarMetaAsync(Sesion.IdUsuarioActual, meta.IdMeta);
+        mensaje = $"Se eliminó la meta \"{meta.Nombre}\".";
+        await CargarMetasAsync();
+    }
+
+    private static string ObtenerClaseBarra(string colorBarra)
+    {
+        switch (colorBarra)
+        {
+            case "gold":
+                return "is-gold";
+            case "navy":
+                return "is-navy";
+            default:
+                return string.Empty;
+        }
+    }
+}

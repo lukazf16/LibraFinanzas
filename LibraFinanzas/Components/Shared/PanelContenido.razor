@@ -1,0 +1,34 @@
+@* Componente reutilizable de panel con encabezado y contenido HTML dinámico (RenderFragment) *@
+
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <h2>@Titulo</h2>
+            @if (!string.IsNullOrWhiteSpace(Descripcion))
+            {
+                <p class="panel-sub">@Descripcion</p>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Nota))
+        {
+            <span class="panel-note">@Nota</span>
+        }
+    </div>
+    <div class="panel-body">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public string Titulo { get; set; } = "Sección";
+
+    [Parameter]
+    public string? Descripcion { get; set; }
+
+    [Parameter]
+    public string? Nota { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

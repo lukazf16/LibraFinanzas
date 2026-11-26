@@ -1,0 +1,108 @@
+@page "/ajustes"
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+
+<PageTitle>Ajustes de cuenta — Libra</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Ajustes de cuenta</h1>
+        <p class="page-subtitle">Actualiza tu información personal y tu saldo inicial guardado en la base de datos.</p>
+    </div>
+</header>
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="feedback-banner is-success" role="status">
+        <span>@mensaje</span>
+        <button type="button" class="feedback-close" @onclick="() => mensaje = null" aria-label="Cerrar aviso">✕</button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="feedback-banner is-error" role="alert">
+        <span>@error</span>
+        <button type="button" class="feedback-close" @onclick="() => error = null" aria-label="Cerrar error">✕</button>
+    </div>
+}
+
+<PanelContenido Titulo="Perfil del usuario" Descripcion="Los cambios se reflejan de inmediato en la barra lateral y en el saludo del panel principal.">
+    <EditForm Model="usuario" OnValidSubmit="GuardarPerfilAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="validation-errors" />
+
+        <div class="form-grid">
+            <div class="field is-full">
+                <label for="usr-nombre">Nombre completo</label>
+                <InputText id="usr-nombre" @bind-Value="usuario.Nombre" />
+                <ValidationMessage For="@(() => usuario.Nombre)" class="validation-message" />
+            </div>
+
+            <div class="field">
+                <label for="usr-correo">Correo electrónico</label>
+                <InputText id="usr-correo" @bind-Value="usuario.Correo" />
+                <ValidationMessage For="@(() => usuario.Correo)" class="validation-message" />
+            </div>
+
+            <div class="field">
+                <label for="usr-tel">Teléfono</label>
+                <InputText id="usr-tel" @bind-Value="usuario.Telefono" />
+                <ValidationMessage For="@(() => usuario.Telefono)" class="validation-message" />
+            </div>
+
+            <div class="field">
+                <label for="usr-saldo">Saldo inicial de la cuenta</label>
+                <div class="input-money-wrap">
+                    <span class="input-money-prefix">$</span>
+                    <InputNumber id="usr-saldo" @bind-Value="usuario.SaldoInicial" step="0.01" />
+                </div>
+                <ValidationMessage For="@(() => usuario.SaldoInicial)" class="validation-message" />
+            </div>
+
+            <div class="field">
+                <label>Estado del perfil</label>
+                <label class="checkbox-row">
+                    <InputCheckbox @bind-Value="usuario.Activo" />
+                    <span>Cuenta activa</span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Guardar cambios</button>
+            </div>
+        </div>
+    </EditForm>
+</PanelContenido>
+
+@code {
+    private Usuario usuario = new();
+    private string? mensaje;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cargado = await Finanzas.ObtenerUsuarioPorIdAsync(Sesion.IdUsuarioActual);
+        if (cargado is not null)
+        {
+            usuario = cargado;
+        }
+    }
+
+    private async Task GuardarPerfilAsync()
+    {
+        mensaje = null;
+        error = null;
+
+        var resultado = await Finanzas.GuardarUsuarioAsync(usuario);
+        if (resultado.Error is not null || resultado.UsuarioActualizado is null)
+        {
+            error = resultado.Error ?? "No se pudieron guardar los cambios.";
+            return;
+        }
+
+        usuario = resultado.UsuarioActualizado;
+        Sesion.ActualizarUsuario(resultado.UsuarioActualizado);
+        mensaje = "Perfil actualizado correctamente en la base de datos.";
+    }
+}

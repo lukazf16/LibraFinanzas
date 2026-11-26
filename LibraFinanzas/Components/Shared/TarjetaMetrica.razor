@@ -1,0 +1,37 @@
+@* Componente reutilizable de tarjeta de indicador financiero (usa [Parameter] y RenderFragment) *@
+
+<article class="metric-card @ClaseVariante @(Destacada ? "is-featured" : "")">
+    <p class="metric-label">@Etiqueta</p>
+    <p class="metric-value">@Valor</p>
+    @if (!string.IsNullOrWhiteSpace(Subtitulo))
+    {
+        <p class="metric-sub @ClaseSubtitulo">@Subtitulo</p>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="metric-extra">@ChildContent</div>
+    }
+</article>
+
+@code {
+    [Parameter]
+    public string Etiqueta { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Valor { get; set; } = "$0.00";
+
+    [Parameter]
+    public string? Subtitulo { get; set; }
+
+    [Parameter]
+    public string ClaseVariante { get; set; } = "is-net";
+
+    [Parameter]
+    public string ClaseSubtitulo { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool Destacada { get; set; } = false;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,214 @@
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+@inject NavigationManager Navigation
+
+<PageTitle>@(modoRegistro ? "Crear cuenta — Libra" : "Iniciar sesión — Libra")</PageTitle>
+
+<div class="auth-shell">
+    <section class="auth-brand-panel">
+        <div class="brand">
+            <svg class="brand-mark" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="34" height="34" rx="8" fill="#1C7356" />
+                <path d="M9 22V13.5L17 9L25 13.5V22" stroke="#F3F4EE" stroke-width="1.7" stroke-linejoin="round" />
+                <path d="M13 22V16.5H21V22" stroke="#F3F4EE" stroke-width="1.7" stroke-linejoin="round" />
+            </svg>
+            <div>
+                <div class="brand-name">Libra</div>
+                <div class="brand-tagline">Finanzas personales</div>
+            </div>
+        </div>
+
+        <div class="auth-hero">
+            <h1>Tu libro contable personal, siempre al día.</h1>
+            <p>
+                Registra ingresos y gastos, detecta gastos hormiga y da seguimiento a tus metas de ahorro
+                con respaldo directo en SQL Server.
+            </p>
+
+            <ul class="auth-highlights">
+                <li>
+                    <span class="highlight-dot"></span>
+                    <span>Cada cuenta mantiene sus propios movimientos, metas y saldo privado.</span>
+                </li>
+                <li>
+                    <span class="highlight-dot"></span>
+                    <span>Al crear una cuenta nueva inicias con tu panel completamente en blanco.</span>
+                </li>
+                <li>
+                    <span class="highlight-dot"></span>
+                    <span>Validación de formularios y almacenamiento con Entity Framework Core.</span>
+                </li>
+            </ul>
+        </div>
+
+        <p class="auth-foot-note">© @DateTime.Today.Year Libra Finanzas · Blazor Server + SQL Server</p>
+    </section>
+
+    <section class="auth-form-panel">
+        <div class="auth-card">
+            <div class="auth-tabs" role="tablist">
+                <button type="button"
+                        class="auth-tab @(!modoRegistro ? "is-active" : "")"
+                        @onclick="() => CambiarModo(false)">
+                    Iniciar sesión
+                </button>
+                <button type="button"
+                        class="auth-tab @(modoRegistro ? "is-active" : "")"
+                        @onclick="() => CambiarModo(true)">
+                    Crear cuenta nueva
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="feedback-banner is-error" role="alert">
+                    <span>@error</span>
+                    <button type="button" class="feedback-close" @onclick="() => error = null" aria-label="Cerrar error">✕</button>
+                </div>
+            }
+
+            @if (!modoRegistro)
+            {
+                <div class="auth-heading">
+                    <h2>Bienvenido de nuevo</h2>
+                    <p>Ingresa tu correo y contraseña para abrir tu panel financiero.</p>
+                </div>
+
+                <EditForm Model="login" OnValidSubmit="IngresarAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="auth-fields">
+                        <div class="field">
+                            <label for="login-correo">Correo electrónico</label>
+                            <InputText id="login-correo" type="email" @bind-Value="login.Correo" placeholder="nombre@correo.com" />
+                            <ValidationMessage For="@(() => login.Correo)" class="validation-message" />
+                        </div>
+
+                        <div class="field">
+                            <label for="login-pass">Contraseña</label>
+                            <InputText id="login-pass" type="password" @bind-Value="login.Contrasena" placeholder="••••••••" />
+                            <ValidationMessage For="@(() => login.Contrasena)" class="validation-message" />
+                        </div>
+
+                        <button type="submit" class="btn-primary auth-submit" disabled="@procesando">
+                            @(procesando ? "Verificando..." : "Iniciar sesión")
+                        </button>
+                    </div>
+                </EditForm>
+
+                <p class="auth-switch">
+                    ¿Aún no tienes cuenta?
+                    <button type="button" class="link-btn" @onclick="() => CambiarModo(true)">Regístrate para empezar en blanco</button>
+                </p>
+            }
+            else
+            {
+                <div class="auth-heading">
+                    <h2>Crea tu cuenta personal</h2>
+                    <p>Tu panel iniciará en blanco ($0.00) para que agregues tus propios datos y metas.</p>
+                </div>
+
+                <EditForm Model="registro" OnValidSubmit="RegistrarAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="auth-fields">
+                        <div class="field">
+                            <label for="reg-nombre">Nombre completo</label>
+                            <InputText id="reg-nombre" @bind-Value="registro.Nombre" placeholder="Ej. Carlos Mendoza" />
+                            <ValidationMessage For="@(() => registro.Nombre)" class="validation-message" />
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="reg-correo">Correo electrónico</label>
+                                <InputText id="reg-correo" type="email" @bind-Value="registro.Correo" placeholder="carlos@correo.com" />
+                                <ValidationMessage For="@(() => registro.Correo)" class="validation-message" />
+                            </div>
+
+                            <div class="field">
+                                <label for="reg-tel">Teléfono</label>
+                                <InputText id="reg-tel" @bind-Value="registro.Telefono" placeholder="+52 312 000 0000" />
+                                <ValidationMessage For="@(() => registro.Telefono)" class="validation-message" />
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="reg-pass">Contraseña</label>
+                                <InputText id="reg-pass" type="password" @bind-Value="registro.Contrasena" placeholder="Mínimo 6 caracteres" />
+                                <ValidationMessage For="@(() => registro.Contrasena)" class="validation-message" />
+                            </div>
+
+                            <div class="field">
+                                <label for="reg-pass2">Confirmar contraseña</label>
+                                <InputText id="reg-pass2" type="password" @bind-Value="registro.ConfirmarContrasena" placeholder="Repite tu contraseña" />
+                                <ValidationMessage For="@(() => registro.ConfirmarContrasena)" class="validation-message" />
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary auth-submit" disabled="@procesando">
+                            @(procesando ? "Creando cuenta..." : "Crear cuenta y entrar")
+                        </button>
+                    </div>
+                </EditForm>
+
+                <p class="auth-switch">
+                    ¿Ya tienes una cuenta?
+                    <button type="button" class="link-btn" @onclick="() => CambiarModo(false)">Inicia sesión aquí</button>
+                </p>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private bool modoRegistro = false;
+    private bool procesando = false;
+    private string? error;
+
+    private LoginModelo login = new();
+    private RegistroModelo registro = new();
+
+    private void CambiarModo(bool aRegistro)
+    {
+        modoRegistro = aRegistro;
+        error = null;
+    }
+
+    private async Task IngresarAsync()
+    {
+        error = null;
+        procesando = true;
+
+        var resultado = await Finanzas.IniciarSesionAsync(login.Correo, login.Contrasena);
+        procesando = false;
+
+        if (resultado.Error is not null || resultado.Usuario is null)
+        {
+            error = resultado.Error ?? "No se pudo iniciar sesión.";
+            return;
+        }
+
+        Sesion.IniciarSesion(resultado.Usuario);
+        Navigation.NavigateTo("/");
+    }
+
+    private async Task RegistrarAsync()
+    {
+        error = null;
+        procesando = true;
+
+        var resultado = await Finanzas.RegistrarUsuarioAsync(registro);
+        procesando = false;
+
+        if (resultado.Error is not null || resultado.Usuario is null)
+        {
+            error = resultado.Error ?? "No se pudo crear la cuenta.";
+            return;
+        }
+
+        // Inicia sesión automáticamente con el nuevo usuario (totalmente en blanco)
+        Sesion.IniciarSesion(resultado.Usuario);
+        Navigation.NavigateTo("/");
+    }
+}

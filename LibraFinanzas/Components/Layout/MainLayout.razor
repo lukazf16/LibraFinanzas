@@ -1,0 +1,51 @@
+﻿@inherits LayoutComponentBase
+@inject SesionService Sesion
+@implements IDisposable
+
+@if (!Sesion.EstaAutenticado)
+{
+    <PantallaAcceso />
+}
+else
+{
+    <div class="app-shell">
+        <NavMenu />
+
+        <main class="main">
+            @Body
+
+            <footer class="site-footer">
+                <span>© @DateTime.Today.Year Libra Finanzas · Panel financiero personal con Blazor y SQL Server.</span>
+                <nav aria-label="Enlaces del pie de página" class="footer-links">
+                    <a href="movimientos">Movimientos</a>
+                    <a href="metas">Metas</a>
+                    <a href="reportes">Reportes</a>
+                    <a href="ajustes">Ajustes</a>
+                </nav>
+            </footer>
+        </main>
+    </div>
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocurrió un error inesperado en la aplicación.
+    <a href="." class="reload">Recargar</a>
+    <span class="dismiss">✕</span>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Sesion.OnCambioSesion += ActualizarVista;
+    }
+
+    private void ActualizarVista()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Sesion.OnCambioSesion -= ActualizarVista;
+    }
+}

@@ -1,0 +1,299 @@
+@page "/movimientos"
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+
+<PageTitle>Movimientos — Libra</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Movimientos</h1>
+        <p class="page-subtitle">Consulta, filtra, edita o elimina tus ingresos y gastos almacenados en SQL Server.</p>
+    </div>
+    <div class="head-actions">
+        @if (editando is null)
+        {
+            <button type="button" class="btn-primary" @onclick="Nuevo">Nuevo movimiento</button>
+        }
+    </div>
+</header>
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="feedback-banner is-success" role="status">
+        <span>@mensaje</span>
+        <button type="button" class="feedback-close" @onclick="() => mensaje = null" aria-label="Cerrar aviso">✕</button>
+    </div>
+}
+
+@if (editando is not null)
+{
+    <PanelContenido Titulo="@(editando.IdMovimiento == 0 ? "Registrar nuevo movimiento" : "Editar movimiento")"
+                    Nota="Validación con DataAnnotations">
+        <EditForm Model="editando" OnValidSubmit="Guardar">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-errors" />
+
+            <div class="form-grid">
+                <div class="field is-full">
+                    <label>Tipo de movimiento</label>
+                    <InputRadioGroup @bind-Value="editando.Tipo" @bind-Value:after="AlCambiarTipo">
+                        <div class="segmented">
+                            <label>
+                                <InputRadio Value="@CatalogosFinancieros.TipoGasto" />
+                                <span>Gasto</span>
+                            </label>
+                            <label>
+                                <InputRadio Value="@CatalogosFinancieros.TipoIngreso" />
+                                <span>Ingreso</span>
+                            </label>
+                        </div>
+                    </InputRadioGroup>
+                </div>
+
+                <div class="field">
+                    <label for="mov-desc">Descripción</label>
+                    <InputText id="mov-desc" @bind-Value="editando.Descripcion" placeholder="Ej. Pago de internet" />
+                    <ValidationMessage For="@(() => editando.Descripcion)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="mov-monto">Monto</label>
+                    <div class="input-money-wrap">
+                        <span class="input-money-prefix">$</span>
+                        <InputNumber id="mov-monto" @bind-Value="editando.Monto" step="0.01" />
+                    </div>
+                    <ValidationMessage For="@(() => editando.Monto)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="mov-cat">Categoría</label>
+                    <InputSelect id="mov-cat" @bind-Value="editando.Categoria">
+                        @foreach (var cat in categoriasFormulario)
+                        {
+                            <option value="@cat">@cat</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="field">
+                    <label for="mov-fecha">Fecha</label>
+                    <InputDate id="mov-fecha" @bind-Value="editando.Fecha" />
+                    <ValidationMessage For="@(() => editando.Fecha)" class="validation-message" />
+                </div>
+
+                @if (editando.Tipo == CatalogosFinancieros.TipoGasto)
+                {
+                    <div class="field is-full">
+                        <label for="mov-clas">Clasificación del gasto</label>
+                        <InputSelect id="mov-clas" @bind-Value="editando.Clasificacion">
+                            <option value="@CatalogosFinancieros.ClasificacionNecesario">Necesario</option>
+                            <option value="@CatalogosFinancieros.ClasificacionInnecesario">Innecesario (gasto hormiga)</option>
+                        </InputSelect>
+                    </div>
+                }
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" @onclick="Cancelar">Cancelar</button>
+                    <button type="submit" class="btn-primary">Guardar cambios</button>
+                </div>
+            </div>
+        </EditForm>
+    </PanelContenido>
+}
+else
+{
+    <div class="filter-bar">
+        <div class="field">
+            <label for="filtro-tipo">Tipo</label>
+            <select id="filtro-tipo" @bind="filtroTipo" @bind:after="CargarListaAsync">
+                <option value="Todos">Todos</option>
+                <option value="@CatalogosFinancieros.TipoIngreso">Ingresos</option>
+                <option value="@CatalogosFinancieros.TipoGasto">Gastos</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="filtro-clas">Clasificación</label>
+            <select id="filtro-clas" @bind="filtroClasificacion" @bind:after="CargarListaAsync">
+                <option value="Todas">Todas</option>
+                <option value="@CatalogosFinancieros.ClasificacionIngreso">Ingreso</option>
+                <option value="@CatalogosFinancieros.ClasificacionNecesario">Necesario</option>
+                <option value="@CatalogosFinancieros.ClasificacionInnecesario">Innecesario (hormiga)</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="filtro-cat">Categoría</label>
+            <select id="filtro-cat" @bind="filtroCategoria" @bind:after="CargarListaAsync">
+                <option value="Todas">Todas</option>
+                @foreach (var cat in CatalogosFinancieros.TodasLasCategorias)
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+        </div>
+
+        <button type="button" class="btn-secondary" @onclick="LimpiarFiltros">Limpiar filtros</button>
+    </div>
+
+    <PanelContenido Titulo="Historial de movimientos" Nota="@($"{movimientos.Count} registros encontrados")">
+        @if (movimientos.Count == 0)
+        {
+            <p class="empty-state">No se encontraron movimientos con los filtros seleccionados.</p>
+        }
+        else
+        {
+            <table class="ledger">
+                <thead>
+                    <tr>
+                        <th scope="col">Movimiento</th>
+                        <th scope="col">Clasificación</th>
+                        <th scope="col">Fecha</th>
+                        <th scope="col" style="text-align:right;">Monto</th>
+                        <th scope="col" style="text-align:right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mov in movimientos)
+                    {
+                        <tr>
+                            <td class="tx-desc">
+                                <span class="tx-title">@mov.Descripcion</span>
+                                <span class="tx-category">@mov.Tipo · @mov.Categoria</span>
+                            </td>
+                            <td>
+                                <span class="tag @ObtenerClaseEtiqueta(mov.Clasificacion)">@mov.Clasificacion</span>
+                            </td>
+                            <td class="tx-date">@mov.Fecha.ToString("dd MMM yyyy", culturaEs)</td>
+                            <td class="amount @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "is-income" : "is-expense")">
+                                @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "+ " : "– ")@mov.Monto.ToString("$#,##0.00", CultureInfo.InvariantCulture)
+                            </td>
+                            <td class="cell-actions">
+                                <button type="button" class="btn-ghost" @onclick="() => Editar(mov)">Editar</button>
+                                <button type="button" class="btn-ghost-danger" @onclick="() => Eliminar(mov)">Eliminar</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </PanelContenido>
+}
+
+@code {
+    private readonly CultureInfo culturaEs = new("es-MX");
+
+    private List<Movimiento> movimientos = new();
+    private Movimiento? editando;
+    private List<string> categoriasFormulario = CatalogosFinancieros.CategoriasGasto;
+
+    private string filtroTipo = "Todos";
+    private string filtroClasificacion = "Todas";
+    private string filtroCategoria = "Todas";
+    private string? mensaje;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarListaAsync();
+    }
+
+    private async Task CargarListaAsync()
+    {
+        movimientos = await Finanzas.ObtenerMovimientosAsync(
+            idUsuario: Sesion.IdUsuarioActual,
+            tipo: filtroTipo,
+            clasificacion: filtroClasificacion,
+            categoria: filtroCategoria);
+    }
+
+    private async Task LimpiarFiltros()
+    {
+        filtroTipo = "Todos";
+        filtroClasificacion = "Todas";
+        filtroCategoria = "Todas";
+        await CargarListaAsync();
+    }
+
+    private void Nuevo()
+    {
+        mensaje = null;
+        editando = new Movimiento
+        {
+            Tipo = CatalogosFinancieros.TipoGasto,
+            Categoria = "Comida",
+            Clasificacion = CatalogosFinancieros.ClasificacionNecesario,
+            Fecha = DateTime.Today
+        };
+        categoriasFormulario = CatalogosFinancieros.CategoriasGasto;
+    }
+
+    private void Editar(Movimiento m)
+    {
+        mensaje = null;
+        editando = new Movimiento
+        {
+            IdMovimiento = m.IdMovimiento,
+            IdUsuario = m.IdUsuario,
+            Tipo = m.Tipo,
+            Descripcion = m.Descripcion,
+            Monto = m.Monto,
+            Categoria = m.Categoria,
+            Clasificacion = m.Clasificacion,
+            Fecha = m.Fecha
+        };
+        categoriasFormulario = CatalogosFinancieros.ObtenerCategoriasPorTipo(m.Tipo);
+    }
+
+    private void AlCambiarTipo()
+    {
+        if (editando is null) return;
+
+        categoriasFormulario = CatalogosFinancieros.ObtenerCategoriasPorTipo(editando.Tipo);
+        if (!categoriasFormulario.Contains(editando.Categoria))
+        {
+            editando.Categoria = categoriasFormulario[0];
+        }
+
+        editando.Clasificacion = editando.Tipo == CatalogosFinancieros.TipoIngreso
+            ? CatalogosFinancieros.ClasificacionIngreso
+            : CatalogosFinancieros.ClasificacionNecesario;
+    }
+
+    private void Cancelar()
+    {
+        editando = null;
+    }
+
+    private async Task Guardar()
+    {
+        if (editando is null) return;
+
+        bool esNuevo = editando.IdMovimiento == 0;
+        await Finanzas.GuardarMovimientoAsync(Sesion.IdUsuarioActual, editando);
+        mensaje = esNuevo
+            ? "Movimiento registrado correctamente."
+            : "Movimiento actualizado correctamente.";
+        editando = null;
+        await CargarListaAsync();
+    }
+
+    private async Task Eliminar(Movimiento m)
+    {
+        await Finanzas.EliminarMovimientoAsync(Sesion.IdUsuarioActual, m.IdMovimiento);
+        mensaje = $"Se eliminó \"{m.Descripcion}\".";
+        await CargarListaAsync();
+    }
+
+    private static string ObtenerClaseEtiqueta(string clasificacion)
+    {
+        switch (clasificacion)
+        {
+            case CatalogosFinancieros.ClasificacionInnecesario:
+                return "is-unnecessary";
+            case CatalogosFinancieros.ClasificacionIngreso:
+                return "is-income-tag";
+            default:
+                return "is-necessary";
+        }
+    }
+}

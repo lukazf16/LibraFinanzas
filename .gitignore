@@ -1,0 +1,13 @@
+## Visual Studio / .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.cache
+*.log
+*.tmp
+
+## Archivos temporales del sistema
+.DS_Store
+Thumbs.db

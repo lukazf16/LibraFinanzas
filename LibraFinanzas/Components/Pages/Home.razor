@@ -1,0 +1,339 @@
+﻿@page "/"
+@inject FinanzasService Finanzas
+@inject SesionService Sesion
+
+<PageTitle>Libra — Panel financiero personal</PageTitle>
+
+<header class="page-head">
+    <div>
+        <h1>Buen día, @usuario.ObtenerPrimerNombre()</h1>
+        <p class="page-subtitle">Resumen de tus ingresos, gastos y metas de ahorro sincronizados con SQL Server.</p>
+    </div>
+    <p class="page-date">@FormatearFechaActual()</p>
+</header>
+
+@if (!string.IsNullOrEmpty(mensajeExito))
+{
+    <div class="feedback-banner is-success" role="status">
+        <span>@mensajeExito</span>
+        <button type="button" class="feedback-close" @onclick="() => mensajeExito = null" aria-label="Cerrar aviso">✕</button>
+    </div>
+}
+
+<!-- ---------- RESUMEN RÁPIDO (Componente reutilizable TarjetaMetrica) ---------- -->
+<section class="summary-grid" aria-label="Resumen financiero">
+    <TarjetaMetrica Etiqueta="Patrimonio neto"
+                    Valor="@FormatearMoneda(resumen.PatrimonioNeto)"
+                    Subtitulo="@(resumen.BalanceMes >= 0 ? $"Balance del mes: +{FormatearMoneda(resumen.BalanceMes)}" : $"Balance del mes: {FormatearMoneda(resumen.BalanceMes)}")"
+                    ClaseVariante="is-net"
+                    ClaseSubtitulo="@(resumen.BalanceMes >= 0 ? "is-up" : "is-warn")"
+                    Destacada="true" />
+
+    <TarjetaMetrica Etiqueta="Ingresos del mes"
+                    Valor="@FormatearMoneda(resumen.IngresosMes)"
+                    Subtitulo="Nómina, freelance y otros"
+                    ClaseVariante="is-income" />
+
+    <TarjetaMetrica Etiqueta="Gastos necesarios"
+                    Valor="@FormatearMoneda(resumen.GastosNecesariosMes)"
+                    Subtitulo="Casa, servicios, transporte"
+                    ClaseVariante="is-needed" />
+
+    <TarjetaMetrica Etiqueta="Gastos hormiga"
+                    Valor="@FormatearMoneda(resumen.GastosHormigaMes)"
+                    Subtitulo="@($"{resumen.PorcentajeHormiga:0.#}% de tus ingresos este mes")"
+                    ClaseVariante="is-ant"
+                    ClaseSubtitulo="@(resumen.GastosHormigaMes > 0 ? "is-warn" : "")" />
+</section>
+
+<!-- ---------- CUERPO ---------- -->
+<div class="body-grid">
+
+    <!-- COLUMNA 1: MOVIMIENTOS RECIENTES + CAPTURA RÁPIDA -->
+    <PanelContenido Titulo="Movimientos recientes" Nota="@($"Últimos {movimientosRecientes.Count} registros")">
+        @if (movimientosRecientes.Count == 0)
+        {
+            <p class="empty-state">
+                Tu historial está en blanco. Registra tu primer ingreso o gasto en el formulario de abajo para empezar.
+            </p>
+        }
+        else
+        {
+            <table class="ledger">
+                <caption>
+                    Ingresos y gastos clasificados por necesidad ·
+                    <a class="link-inline" href="movimientos">Ver historial completo</a>
+                </caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Movimiento</th>
+                        <th scope="col">Clasificación</th>
+                        <th scope="col">Fecha</th>
+                        <th scope="col" style="text-align:right;">Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mov in movimientosRecientes)
+                    {
+                        <tr>
+                            <td class="tx-desc">
+                                <span class="tx-title">@mov.Descripcion</span>
+                                <span class="tx-category">@mov.Tipo · @mov.Categoria</span>
+                            </td>
+                            <td>
+                                <span class="tag @ObtenerClaseEtiqueta(mov.Clasificacion)">@mov.Clasificacion</span>
+                            </td>
+                            <td class="tx-date">@mov.Fecha.ToString("d MMM", culturaEs)</td>
+                            <td class="amount @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "is-income" : "is-expense")">
+                                @(mov.Tipo == CatalogosFinancieros.TipoIngreso ? "+ " : "– ")@FormatearMoneda(mov.Monto)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <!-- FORMULARIO DE CAPTURA CON EDITFORM Y VALIDACIÓN -->
+        <EditForm Model="nuevoMovimiento" OnValidSubmit="GuardarMovimiento" class="capture-form">
+            <DataAnnotationsValidator />
+
+            <h3>Registrar movimiento</h3>
+            <p class="panel-note">Anota un ingreso o gasto para guardar en SQL Server y actualizar tu balance al instante.</p>
+
+            <div class="form-grid">
+                <div class="field is-full">
+                    <label>Tipo de movimiento</label>
+                    <InputRadioGroup @bind-Value="nuevoMovimiento.Tipo" @bind-Value:after="AlCambiarTipo">
+                        <div class="segmented">
+                            <label>
+                                <InputRadio Value="@CatalogosFinancieros.TipoGasto" />
+                                <span>Gasto</span>
+                            </label>
+                            <label>
+                                <InputRadio Value="@CatalogosFinancieros.TipoIngreso" />
+                                <span>Ingreso</span>
+                            </label>
+                        </div>
+                    </InputRadioGroup>
+                </div>
+
+                <div class="field">
+                    <label for="tx-name">Descripción</label>
+                    <InputText id="tx-name" @bind-Value="nuevoMovimiento.Descripcion" placeholder="Ej. Comida fuera de casa" />
+                    <ValidationMessage For="@(() => nuevoMovimiento.Descripcion)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="tx-amount">Monto</label>
+                    <div class="input-money-wrap">
+                        <span class="input-money-prefix">$</span>
+                        <InputNumber id="tx-amount" @bind-Value="nuevoMovimiento.Monto" step="0.01" placeholder="0.00" />
+                    </div>
+                    <ValidationMessage For="@(() => nuevoMovimiento.Monto)" class="validation-message" />
+                </div>
+
+                <div class="field">
+                    <label for="tx-category">Categoría</label>
+                    <InputSelect id="tx-category" @bind-Value="nuevoMovimiento.Categoria">
+                        @foreach (var cat in categoriasDisponibles)
+                        {
+                            <option value="@cat">@cat</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                @if (nuevoMovimiento.Tipo == CatalogosFinancieros.TipoGasto)
+                {
+                    <div class="field">
+                        <label for="tx-class">Clasificación</label>
+                        <InputSelect id="tx-class" @bind-Value="nuevoMovimiento.Clasificacion">
+                            <option value="@CatalogosFinancieros.ClasificacionNecesario">Necesario</option>
+                            <option value="@CatalogosFinancieros.ClasificacionInnecesario">Innecesario (hormiga)</option>
+                        </InputSelect>
+                    </div>
+                }
+                else
+                {
+                    <div class="field">
+                        <label for="tx-date">Fecha</label>
+                        <InputDate id="tx-date" @bind-Value="nuevoMovimiento.Fecha" />
+                    </div>
+                }
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Guardar movimiento</button>
+                </div>
+            </div>
+        </EditForm>
+    </PanelContenido>
+
+    <!-- COLUMNA 2: METAS DE AHORRO -->
+    <PanelContenido Titulo="Metas a fin de año" Nota="@($"{metas.Count} activas")">
+        @if (metas.Count == 0)
+        {
+            <p class="empty-state">
+                Aún no tienes metas registradas.
+                <a class="link-inline" href="metas">Crea tu primera meta de ahorro</a>.
+            </p>
+        }
+        else
+        {
+            <div class="goal-list">
+                @foreach (var meta in metas)
+                {
+                    int porcentaje = meta.CalcularPorcentaje();
+                    decimal faltante = meta.CalcularFaltante();
+
+                    <article class="goal-card">
+                        <div class="goal-top">
+                            <span class="goal-name">@meta.Nombre</span>
+                            <span class="goal-deadline">Vence @meta.FechaLimite.ToString("MMM yyyy", culturaEs)</span>
+                        </div>
+                        <p class="goal-amounts">
+                            <span class="money">@FormatearMonedaEntera(meta.MontoActual)</span>
+                            de
+                            <span class="money">@FormatearMonedaEntera(meta.MontoObjetivo)</span>
+                        </p>
+                        <div class="progress-track">
+                            <div class="progress-fill @ObtenerClaseBarra(meta.ColorBarra)" style="width: @(porcentaje)%;"></div>
+                        </div>
+                        <div class="goal-footer">
+                            <span>@(faltante > 0 ? $"Faltan {FormatearMonedaEntera(faltante)}" : "Meta completada")</span>
+                            <span class="goal-pct">@porcentaje%</span>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        <div class="ant-callout">
+            <strong>Dato del mes</strong>
+            @if (resumen.CantidadMovimientos == 0)
+            {
+                <span>
+                    Tu cuenta está lista para empezar. También puedes configurar tu saldo inicial en
+                    <a class="link-inline" href="ajustes">Ajustes</a>.
+                </span>
+            }
+            else if (resumen.GastosHormigaMes > 0)
+            {
+                <span>
+                    Si reduces a la mitad tus gastos hormiga (@FormatearMonedaEntera(resumen.AhorroSugeridoHormiga)),
+                    podrías acelerar tus metas de ahorro y mejorar tu balance mensual.
+                </span>
+            }
+            else
+            {
+                <span>Excelente control: no tienes gastos hormiga registrados este mes.</span>
+            }
+        </div>
+
+        <div style="margin-top: 1rem; text-align: right;">
+            <a class="link-inline" href="metas">Administrar metas y abonos →</a>
+        </div>
+    </PanelContenido>
+
+</div>
+
+@code {
+    private readonly CultureInfo culturaEs = new("es-MX");
+
+    private Usuario usuario = new();
+    private ResumenFinanciero resumen = new();
+    private List<Movimiento> movimientosRecientes = new();
+    private List<MetaAhorro> metas = new();
+
+    private Movimiento nuevoMovimiento = new();
+    private List<string> categoriasDisponibles = CatalogosFinancieros.CategoriasGasto;
+    private string? mensajeExito;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReiniciarFormulario();
+        await CargarTableroAsync();
+    }
+
+    private async Task CargarTableroAsync()
+    {
+        int idUsuario = Sesion.IdUsuarioActual;
+        if (idUsuario == 0) return;
+
+        usuario = await Finanzas.ObtenerUsuarioPorIdAsync(idUsuario) ?? Sesion.UsuarioActual ?? new Usuario();
+        resumen = await Finanzas.ObtenerResumenAsync(idUsuario);
+        movimientosRecientes = await Finanzas.ObtenerMovimientosRecientesAsync(idUsuario, 5);
+        metas = await Finanzas.ObtenerMetasAsync(idUsuario);
+    }
+
+    private void ReiniciarFormulario()
+    {
+        nuevoMovimiento = new Movimiento
+        {
+            Tipo = CatalogosFinancieros.TipoGasto,
+            Categoria = "Comida",
+            Clasificacion = CatalogosFinancieros.ClasificacionNecesario,
+            Fecha = DateTime.Today
+        };
+        categoriasDisponibles = CatalogosFinancieros.CategoriasGasto;
+    }
+
+    private void AlCambiarTipo()
+    {
+        categoriasDisponibles = CatalogosFinancieros.ObtenerCategoriasPorTipo(nuevoMovimiento.Tipo);
+        nuevoMovimiento.Categoria = categoriasDisponibles[0];
+
+        if (nuevoMovimiento.Tipo == CatalogosFinancieros.TipoIngreso)
+        {
+            nuevoMovimiento.Clasificacion = CatalogosFinancieros.ClasificacionIngreso;
+        }
+        else
+        {
+            nuevoMovimiento.Clasificacion = CatalogosFinancieros.ClasificacionNecesario;
+        }
+    }
+
+    private async Task GuardarMovimiento()
+    {
+        await Finanzas.GuardarMovimientoAsync(Sesion.IdUsuarioActual, nuevoMovimiento);
+        mensajeExito = $"Movimiento \"{nuevoMovimiento.Descripcion}\" guardado correctamente en la base de datos.";
+        ReiniciarFormulario();
+        await CargarTableroAsync();
+    }
+
+    private string FormatearFechaActual()
+    {
+        string texto = DateTime.Today.ToString("dddd, d 'de' MMMM 'de' yyyy", culturaEs);
+        return char.ToUpper(texto[0]) + texto.Substring(1);
+    }
+
+    private static string FormatearMoneda(decimal monto) =>
+        monto.ToString("$#,##0.00", CultureInfo.InvariantCulture);
+
+    private static string FormatearMonedaEntera(decimal monto) =>
+        monto.ToString("$#,##0", CultureInfo.InvariantCulture);
+
+    private static string ObtenerClaseEtiqueta(string clasificacion)
+    {
+        switch (clasificacion)
+        {
+            case CatalogosFinancieros.ClasificacionInnecesario:
+                return "is-unnecessary";
+            case CatalogosFinancieros.ClasificacionIngreso:
+                return "is-income-tag";
+            default:
+                return "is-necessary";
+        }
+    }
+
+    private static string ObtenerClaseBarra(string colorBarra)
+    {
+        switch (colorBarra)
+        {
+            case "gold":
+                return "is-gold";
+            case "navy":
+                return "is-navy";
+            default:
+                return string.Empty;
+        }
+    }
+}
